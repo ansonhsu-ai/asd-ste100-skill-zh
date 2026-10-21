@@ -1,13 +1,13 @@
-"""从生图原图裁出公众号要用的几个尺寸（可重跑，源图只有一个）。
+"""從生圖原圖裁出文章要用的幾個尺寸（可重跑，原圖只有一張）。
 
     python make-covers.py [--source run-02/image-01.png]
 
-产出（都写在本目录）：
-    cover-2.35x1.png / .jpg   1792x763   公众号首图比例 2.35:1
-    cover-900x383.jpg         900x383    公众号首图规格
-    cover-1x1-1024.png / .jpg 1024x1024  次图 / 头像位
+產出（都寫在本目錄）：
+    cover-2.35x1.png / .jpg   1792x763   文章首圖比例 2.35:1
+    cover-900x383.jpg         900x383    文章首圖規格
+    cover-1x1-1024.png / .jpg 1024x1024  次圖 / 頭像位
 
-裁切一律居中；生图 prompt 已要求把重要元素放在中间横带，所以纵向裁掉 261 px 是安全的。
+裁切一律居中；生圖 prompt 已要求把重要元素放在中間橫帶，所以縱向裁掉 261 px 是安全的。
 """
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def main() -> None:
     args = parser.parse_args()
     source = Image.open(HERE / args.source)
     source.load()
-    print(f'源图：{args.source}  {source.size[0]}x{source.size[1]} {source.mode}')
+    print(f'源圖：{args.source}  {source.size[0]}x{source.size[1]} {source.mode}')
 
     wide = center_crop(source, 2.35)
     save(wide, 'cover-2.35x1')

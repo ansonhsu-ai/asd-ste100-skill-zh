@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""受控中文 linter —— ASD-STE100 的中文对应物，只查机械可判的规则。
+"""受控中文 linter（繁體中文・台灣用語）—— ASD-STE100 的中文對應物，只查機械可判的規則。
 
 用法：
-    python scripts/ste-lint-zh.py <文件...>          # 检查文件
-    python scripts/ste-lint-zh.py < 文本             # 从 stdin 读
-    python scripts/ste-lint-zh.py --json <文件...>   # 结构化输出
-    python scripts/ste-lint-zh.py --max-chars 25 f   # 程序步骤用 25 字上限
-    python scripts/ste-lint-zh.py --baseline 12 f    # 存量文档：容忍 12 处硬违规
+    python scripts/ste-lint-zh.py <檔案...>          # 檢查檔案
+    python scripts/ste-lint-zh.py < 文字             # 從 stdin 讀
+    python scripts/ste-lint-zh.py --json <檔案...>   # 結構化輸出
+    python scripts/ste-lint-zh.py --max-chars 25 f   # 程序步驟用 25 字上限
+    python scripts/ste-lint-zh.py --baseline 12 f    # 既有文件：容忍 12 處硬違規
     python scripts/ste-lint-zh.py --disable vague-word,synonym-rotation f
-    python scripts/ste-lint-zh.py --selftest         # 自检
+    python scripts/ste-lint-zh.py --selftest         # 自檢
 
-硬违规（semicolon / long-sentence / nominalization / marketing-adjective /
-empty-phrase / synonym-rotation）超过 --baseline 时退出码 1。
-建议类（passive-voice / compound-aspect / vague-word / halfwidth-punct /
-dash-join）只报告，永不导致失败。
+硬違規（semicolon / long-sentence / nominalization / marketing-adjective /
+empty-phrase / synonym-rotation）超過 --baseline 時退出碼 1。
+建議類（passive-voice / compound-aspect / vague-word / halfwidth-punct /
+dash-join）只報告，永不導致失敗。
 
-它**永远不挑情态**（可能 / 也许 / 大概 / 倾向于）：置信度是内容，不是风格。
-自检里有一条断言：「请求可能已失败。」必须干净。
+它**永遠不挑情態**（可能 / 也許 / 大概 / 傾向於）：置信度是內容，不是風格。
+自檢裡有一條斷言：「請求可能已失敗。」必須乾淨。
 
-仅标准库，Python 3.8+。
+僅標準庫，Python 3.8+。
 """
 
 from __future__ import annotations
@@ -57,65 +57,67 @@ MASK_RE = re.compile(r"`[^`\n]*`|https?://\S+|\[[^\]]*\]\([^)]*\)")
 LIST_MARK_RE = re.compile(r"^(\s*(?:#{1,6}|[-*+]|\d{1,3}[.)]|>)\s+)")
 SENTENCE_SPLIT_RE = re.compile(r"[。！？!?；;]")
 
-# 营销形容词：宣称质量而不给证据。命中即删，或换成可测量的说法。
+# 行銷形容詞：宣稱品質而不給證據。命中即刪，或換成可測量的說法。
 MARKETING_WORDS = (
-    "无缝", "强大", "赋能", "闭环", "极致", "丝滑", "一站式", "全方位", "颠覆",
-    "领先", "顶级", "沉浸式", "智能化", "黑科技", "革命性", "独创", "完美",
-    "极速", "超强", "极致体验", "降维打击",
+    "無縫", "強大", "賦能", "閉環", "極致", "絲滑", "一站式", "全方位", "顛覆",
+    "領先", "頂級", "沉浸式", "智慧化", "黑科技", "革命性", "獨創", "完美",
+    "極速", "超強", "極致體驗", "降維打擊",
 )
 
-# 套话：删掉之后句子信息量不变。
+# 套話：刪掉之後句子資訊量不變。
 EMPTY_PHRASES = (
-    "需要注意的是", "值得一提的是", "众所周知", "不难看出", "不言而喻",
-    "在一定程度上", "某种意义上", "从某种角度", "综上所述", "显而易见",
-    "毋庸置疑", "总的来说",
+    "需要注意的是", "值得一提的是", "眾所周知", "不難看出", "不言而喻",
+    "在一定程度上", "某種意義上", "從某種角度", "綜上所述", "顯而易見",
+    "毋庸置疑", "總的來說",
 )
 
-# 名词化：虚动词 + 动作名词。改成单个动词。
+# 名詞化：虛動詞 + 動作名詞。改成單個動詞。
 NOMINALIZATION_RE = re.compile(
-    r"(进行|作出|加以|予以|给予|开展)(一[下个次些])?"
+    r"(進行|作出|加以|予以|給予|開展)(一[下個次些])?"
     r"[^，。！？；、\s]{0,6}?"
-    r"(分析|检查|处理|优化|验证|评估|讨论|说明|调整|改造|升级|计算|统计|测试|"
-    r"梳理|比对|排查|确认|审核|复盘|治理|维护|修复|部署|设计|规划|调研|探索|实践|尝试)"
+    r"(分析|檢查|處理|最佳化|驗證|評估|討論|說明|調整|改造|升級|計算|統計|測試|"
+    r"梳理|比對|排查|確認|審核|覆盤|治理|維護|修復|部署|設計|規劃|調研|探索|實踐|嘗試)"
 )
 
 PASSIVE_RE = re.compile(r"被[^，。！？；\s]{0,6}")
-COMPOUND_ASPECT_RE = re.compile(r"(已经[^，。！？；]{0,10}[了过]|正在[^，。！？；]{0,8}[中着])")
-VAGUE_RE = re.compile(r"(相关|有关|若干|一些|适当|酌情|必要时|等等|之类|大致|差不多|一定程度)")
+COMPOUND_ASPECT_RE = re.compile(r"(已經[^，。！？；]{0,10}[了過]|正在[^，。！？；]{0,8}[中著])")
+VAGUE_RE = re.compile(r"(相關|有關|若干|一些|適當|酌情|必要時|等等|之類|大致|差不多|一定程度)")
 HALFWIDTH_RE = re.compile(r"(?<=[\u4e00-\u9fff])[,;:!?](?=[\u4e00-\u9fff])")
 DASH_JOIN_RE = re.compile(r"——")
 SEMICOLON_RE = re.compile(r"[；;]")
 
-# 同义轮换：同一篇里出现两个以上成员即视为轮换（同文档范围，跨行统计）。
+# 同義輪換：同一篇裡出現兩個以上成員即視為輪換（同一份文件範圍，跨行統計）。
 SYNONYM_GROUPS: Tuple[Tuple[str, ...], ...] = (
-    ("用户", "客户", "使用者", "终端用户"),
-    ("删除", "移除", "清除", "删掉"),
-    ("检查", "校验", "核对", "核查"),
-    ("创建", "新建", "建立", "生成"),
-    ("错误", "异常", "报错", "故障"),
-    ("配置", "设置", "设定"),
-    ("显示", "展示", "呈现"),
-    ("运行", "执行"),
-    ("保存", "存储"),
-    ("修改", "更改", "变更"),
+    ("使用者", "用戶", "客戶", "終端使用者"),
+    ("刪除", "移除", "清除", "刪掉"),
+    ("檢查", "驗證", "核對", "核查"),
+    ("建立", "新增", "新建", "生成"),
+    ("錯誤", "異常", "故障"),
+    ("設定", "設置", "配置"),
+    ("顯示", "展示", "呈現"),
+    ("執行", "運行", "運作"),
+    ("儲存", "保存"),
+    ("修改", "更改", "變更"),
 )
 
-# 中文没有词边界，命中后要挡掉"看起来像、其实是别的词"的后缀：
-# 客户端不是客户，用户名不是用户，检查点不是检查，运行时不是运行……
+# 中文沒有詞邊界，命中後要擋掉"看起來像、其實是別的詞"的字尾：
+# 用戶端不是用戶，客戶端不是客戶，使用者名稱不是使用者，檢查點不是檢查，
+# 建立時間不是建立，執行緒不是執行……
 SYNONYM_BLOCKED_SUFFIX: Dict[str, Tuple[str, ...]] = {
-    "用户": ("名",),
-    "客户": ("端",),
-    "检查": ("点",),
-    "创建": ("时间",),
+    "使用者": ("名",),
+    "用戶": ("端",),
+    "客戶": ("端",),
+    "檢查": ("點",),
+    "建立": ("時間",),
     "生成": ("式",),
-    "显示": ("器",),
-    "运行": ("时",),
-    "错误": ("码",),
+    "顯示": ("器",),
+    "執行": ("緒",),
+    "錯誤": ("碼",),
 }
 
 
 def member_occurrences(text: str, member: str) -> List[int]:
-    """找出 member 在 text 里真正算数的位置，跳过被后缀挡掉的假命中。"""
+    """找出 member 在 text 裡真正算數的位置，跳過被字尾擋掉的假命中。"""
     blocked = SYNONYM_BLOCKED_SUFFIX.get(member, ())
     positions: List[int] = []
     start = 0
@@ -164,14 +166,14 @@ class Finding:
 
 
 def count_chars(text: str) -> int:
-    """长度口径：一个汉字算 1，一段连续的拉丁字母 / 数字算 1（同上游「按词算」）。"""
+    """長度口徑：一個漢字算 1，一段連續的拉丁字母 / 數字算 1（同上遊「按詞算」）。"""
     cjk = len(CJK_RE.findall(text))
     latin = len(TOKEN_RE.findall(text))
     return cjk + latin
 
 
 def mask_line(line: str) -> str:
-    """把行内代码、URL、markdown 链接替换成等长空格 —— 代码不是散文，不参与检查。"""
+    """把行內程式碼、URL、markdown 連結替換成等長空格 —— 程式碼不是散文，不參與檢查。"""
     chars = list(line)
     for match in MASK_RE.finditer(line):
         for index in range(match.start(), match.end()):
@@ -180,7 +182,7 @@ def mask_line(line: str) -> str:
 
 
 def split_cells(line: str) -> List[Tuple[int, str]]:
-    """按 markdown 表格竖线切段，保留每段在原行里的起始列。"""
+    """按 markdown 表格分隔線切段，保留每段在原行裡的起始列。"""
     cells: List[Tuple[int, str]] = []
     start = 0
     for index, char in enumerate(line):
@@ -192,7 +194,7 @@ def split_cells(line: str) -> List[Tuple[int, str]]:
 
 
 def iter_sentences(text: str, base: int) -> Iterable[Tuple[int, str]]:
-    """按句末标点切句；分号留在句内，好让 semicolon 规则看得见它。"""
+    """按句末標點切句；分號留在句內，好讓 semicolon 規則看得見它。"""
     start = 0
     for match in SENT_END_RE.finditer(text):
         end = match.end()
@@ -232,7 +234,7 @@ def sentence_findings(
     for match in SEMICOLON_RE.finditer(sentence):
         add(
             "semicolon",
-            "分号把两件事串进了一句。拆成两句。",
+            "分號把兩件事串進了一句。拆成兩句。",
             match.group(0),
             match.start(),
         )
@@ -241,7 +243,7 @@ def sentence_findings(
     if length > opts.max_chars:
         add(
             "long-sentence",
-            f"句子 {length} 字（上限 {opts.max_chars}）。拆开，或删掉不必要的信息。",
+            f"句子 {length} 字（上限 {opts.max_chars}）。拆開，或刪掉不必要的資訊。",
             f"{length} 字",
             0,
         )
@@ -249,7 +251,7 @@ def sentence_findings(
     for match in NOMINALIZATION_RE.finditer(sentence):
         add(
             "nominalization",
-            f"虚动词 + 名词（「{match.group(0)}」）。直接用动词。",
+            f"虛動詞 + 名詞（「{match.group(0)}」）。直接用動詞。",
             match.group(0),
             match.start(),
         )
@@ -259,7 +261,7 @@ def sentence_findings(
         if start >= 0:
             add(
                 "marketing-adjective",
-                "营销形容词。删掉，或换成撑得起这句话的测量值。",
+                "行銷形容詞。刪掉，或換成撐得起這句話的測量值。",
                 word,
                 start,
             )
@@ -269,7 +271,7 @@ def sentence_findings(
         if start >= 0:
             add(
                 "empty-phrase",
-                "套话。删掉，直接说事。",
+                "套話。刪掉，直接說事。",
                 phrase,
                 start,
             )
@@ -277,7 +279,7 @@ def sentence_findings(
     for match in PASSIVE_RE.finditer(sentence):
         add(
             "passive-voice",
-            "被动语态。说清施事并改用主动，除非施事未知或无关。",
+            "被動語態。說清施事並改用主動，除非施事未知或無關。",
             match.group(0),
             match.start(),
         )
@@ -285,7 +287,7 @@ def sentence_findings(
     for match in COMPOUND_ASPECT_RE.finditer(sentence):
         add(
             "compound-aspect",
-            "复合体貌。简单体貌够用就简化；表达当前相关性时保留并标注。",
+            "複合體貌。簡單體貌夠用就簡化；表達當前相關性時保留並標註。",
             match.group(0),
             match.start(),
         )
@@ -293,7 +295,7 @@ def sentence_findings(
     for match in VAGUE_RE.finditer(sentence):
         add(
             "vague-word",
-            "含糊词。给出数量、范围或条件。",
+            "含糊詞。給出數量、範圍或條件。",
             match.group(0),
             match.start(),
         )
@@ -301,7 +303,7 @@ def sentence_findings(
     for match in HALFWIDTH_RE.finditer(sentence):
         add(
             "halfwidth-punct",
-            "中文句子里的半角标点。换成全角。",
+            "中文句子裡的半形標點。換成全形。",
             match.group(0),
             match.start(),
         )
@@ -309,7 +311,7 @@ def sentence_findings(
     for match in DASH_JOIN_RE.finditer(sentence):
         add(
             "dash-join",
-            "破折号连接。通常说明这句话该拆。",
+            "破折號連接。通常說明這句話該拆。",
             match.group(0),
             match.start(),
         )
@@ -356,7 +358,7 @@ def analyze(text: str, path: str = "<stdin>", opts: Optional[Options] = None) ->
         if len(members) < 2:
             continue
         group = SYNONYM_GROUPS[group_index]
-        # 保留出现次数最多的那个（并列时取组内顺序靠前的），其余算轮换。
+        # 保留出現次數最多的那個（並列時取組內順序靠前的），其餘算輪換。
         keeper = max(members.items(), key=lambda item: (item[1][2], -group.index(item[0])))[0]
         found = "、".join(f"{name}×{data[2]}" for name, data in members.items())
         for member, (line_no, col, _count) in sorted(members.items(), key=lambda item: item[1][:2]):
@@ -369,7 +371,7 @@ def analyze(text: str, path: str = "<stdin>", opts: Optional[Options] = None) ->
                     col=col,
                     rule="synonym-rotation",
                     severity=RULE_SEVERITY["synonym-rotation"],
-                    message=f"同义轮换：{found} 混用。定一个名字全篇用它，建议「{keeper}」。",
+                    message=f"同義輪換：{found} 混用。定一個名字全篇用它，建議「{keeper}」。",
                     match=member,
                 )
             )
@@ -383,9 +385,9 @@ def summarize(findings: Sequence[Finding], text: str, baseline: int) -> str:
     total_chars = count_chars(text)
     rate = (len(findings) / total_chars * 100) if total_chars else 0.0
     return (
-        f"共 {len(findings)} 处发现（硬违规 {hard}，baseline {baseline}），"
-        f"{total_chars} 字，每 100 字 {rate:.1f} 处\n"
-        "情态（可能 / 也许 / 大概 / 倾向于）永不标记：置信度是内容。"
+        f"共 {len(findings)} 處發現（硬違規 {hard}，baseline {baseline}），"
+        f"{total_chars} 字，每 100 字 {rate:.1f} 處\n"
+        "情態（可能 / 也許 / 大概 / 傾向於）永不標記：置信度是內容。"
     )
 
 
@@ -401,7 +403,7 @@ def run(paths: Sequence[str], opts: Options, as_json: bool, stream) -> int:
                 with open(path, "r", encoding="utf-8") as handle:
                     sources.append((path, handle.read()))
             except OSError as error:
-                stream.write(f"{path}: 读不到文件：{error}\n")
+                stream.write(f"{path}: 讀不到檔案：{error}\n")
                 return 2
     else:
         sources = [("<stdin>", sys.stdin.read())]
@@ -415,9 +417,9 @@ def run(paths: Sequence[str], opts: Options, as_json: bool, stream) -> int:
         if not as_json:
             hard = sum(1 for f in findings if f.severity == HARD)
             if hard > opts.baseline:
-                outputs.append(f"→ {path}: {hard} 处硬违规（baseline {opts.baseline}）")
+                outputs.append(f"→ {path}: {hard} 處硬違規（baseline {opts.baseline}）")
             else:
-                outputs.append(f"→ {path}: 硬违规 {hard} 处，未超过 baseline {opts.baseline}")
+                outputs.append(f"→ {path}: 硬違規 {hard} 處，未超過 baseline {opts.baseline}")
 
     if as_json:
         stream.write(json.dumps([f.as_dict() for f in all_findings], ensure_ascii=False, indent=2))
@@ -445,51 +447,51 @@ def selftest() -> int:
             failures.append(f"{name} {detail}")
             print(f"  FAIL {name} {detail}")
 
-    print("受控中文 linter 自检：")
-    check("干净文本没有发现", rules("打开配置文件。读取第三行。把结果写入日志。") == [])
-    check("情态永不标记（可能已失败）", rules("请求可能已失败。") == [])
-    check("代码块里的分号不算", rules("```\n先开票；再发货\n```") == [])
-    check("行内代码被屏蔽", rules("用 `a；b` 分隔即可。") == [])
-    check("分号被判硬违规", "semicolon" in rules("先开票；再发货。"))
-    check("名词化被判", "nominalization" in rules("我们需要对日志进行分析。"))
-    check("营销形容词被判", rules("这是一款无缝又强大的工具。").count("marketing-adjective") == 2)
-    check("套话被判", "empty-phrase" in rules("需要注意的是，缓存会过期。"))
-    check("超长句被判", "long-sentence" in rules("把" + "很长的说明" * 9 + "写完了。"))
+    print("受控中文 linter 自檢：")
+    check("乾淨文字沒有發現", rules("開啟設定檔。讀取第三行。把結果寫入日誌。") == [])
+    check("情態永不標記（可能已失敗）", rules("請求可能已失敗。") == [])
+    check("程式碼塊裡的分號不算", rules("```\n先開票；再出貨\n```") == [])
+    check("行內程式碼被遮罩", rules("用 `a；b` 分隔即可。") == [])
+    check("分號被判硬違規", "semicolon" in rules("先開票；再出貨。"))
+    check("名詞化被判", "nominalization" in rules("我們需要對日誌進行分析。"))
+    check("行銷形容詞被判", rules("這是一款無縫又強大的工具。").count("marketing-adjective") == 2)
+    check("套話被判", "empty-phrase" in rules("需要注意的是，快取會過期。"))
+    check("超長句被判", "long-sentence" in rules("把" + "很長的說明" * 9 + "寫完了。"))
     check(
-        "同义轮换被判",
-        "synonym-rotation" in rules("用户登录。用户退出。客户付款。"),
+        "同義輪換被判",
+        "synonym-rotation" in rules("使用者登入。使用者退出。客戶付款。"),
     )
-    check("单一用词不报轮换", "synonym-rotation" not in rules("用户登录。用户退出。用户付款。"))
+    check("單一用詞不報輪換", "synonym-rotation" not in rules("使用者登入。使用者退出。使用者付款。"))
     check(
-        "后缀挡住假命中（客户端 ≠ 客户）",
-        "synonym-rotation" not in rules("客户端版本过旧。客户端重试。用户登录。"),
+        "字尾擋住假命中（用戶端 ≠ 用戶）",
+        "synonym-rotation" not in rules("用戶端版本過舊。用戶端重試。使用者登入。"),
     )
-    check("含糊词是建议类", "vague-word" in rules("在必要时做适当调整。"))
+    check("含糊詞是建議類", "vague-word" in rules("在必要時做適當調整。"))
     check(
-        "建议类不影响退出判定",
+        "建議類不影響退出判定",
         all(
             finding.severity == ADVISORY
-            for finding in analyze("日志被清空了。", "<selftest>", clean)
+            for finding in analyze("日誌被清空了。", "<selftest>", clean)
         ),
     )
-    check("列表标记被剥掉", rules("- 打开文件。\n- 读取第三行。") == [])
-    check("表格单元格分别检查", "semicolon" in rules("| 甲 | 先开票；再发货 |"))
-    check("--max-chars 收紧后长句被判", "long-sentence" in rules("读取配置并写入日志。", Options(max_chars=5)))
+    check("清單標記被剝掉", rules("- 開啟檔案。\n- 讀取第三行。") == [])
+    check("表格各儲存格分別檢查", "semicolon" in rules("| 甲 | 先開票；再出貨 |"))
+    check("--max-chars 收緊後長句被判", "long-sentence" in rules("讀取設定並寫入日誌。", Options(max_chars=5)))
     check(
-        "disable 关得掉规则",
-        "semicolon" not in rules("先开票；再发货。", Options(disabled=frozenset({"semicolon"}))),
+        "disable 關得掉規則",
+        "semicolon" not in rules("先開票；再出貨。", Options(disabled=frozenset({"semicolon"}))),
     )
     check(
-        "baseline 容忍硬违规",
-        run_quiet("先开票；再发货。\n", Options(baseline=1)) == 0,
+        "baseline 容忍硬違規",
+        run_quiet("先開票；再出貨。\n", Options(baseline=1)) == 0,
     )
     check(
-        "baseline 不足时退出码 1",
-        run_quiet("先开票；再发货。\n", Options(baseline=0)) == 1,
+        "baseline 不足時退出碼 1",
+        run_quiet("先開票；再出貨。\n", Options(baseline=0)) == 1,
     )
 
     if failures:
-        print(f"selftest FAILED（{len(failures)} 项）")
+        print(f"selftest FAILED（{len(failures)} 項）")
         return 1
     print("selftest OK")
     return 0
@@ -507,15 +509,15 @@ def run_quiet(text: str, opts: Options) -> int:
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="ste-lint-zh.py",
-        description="受控中文 linter：只查机械可判的规则，永不挑情态。",
+        description="受控中文 linter（台灣用語）：只查機械可判的規則，永不挑情態。",
     )
-    parser.add_argument("files", nargs="*", help="要检查的文件；不给则读 stdin")
-    parser.add_argument("--json", action="store_true", help="输出 JSON")
-    parser.add_argument("--max-chars", type=int, default=40, help="句长上限（默认 40；程序步骤建议 25）")
-    parser.add_argument("--baseline", type=int, default=0, help="容忍的硬违规数（存量文档接入用）")
-    parser.add_argument("--disable", default="", help="要关掉的规则名，逗号分隔")
-    parser.add_argument("--selftest", action="store_true", help="跑内置自检")
-    parser.add_argument("--list-rules", action="store_true", help="列出规则与严重度")
+    parser.add_argument("files", nargs="*", help="要檢查的檔案；不給則讀 stdin")
+    parser.add_argument("--json", action="store_true", help="輸出 JSON")
+    parser.add_argument("--max-chars", type=int, default=40, help="句長上限（預設 40；程序步驟建議 25）")
+    parser.add_argument("--baseline", type=int, default=0, help="容忍的硬違規數（既有文件接入用）")
+    parser.add_argument("--disable", default="", help="要關掉的規則名，逗號分隔")
+    parser.add_argument("--selftest", action="store_true", help="跑內建自檢")
+    parser.add_argument("--list-rules", action="store_true", help="列出規則與嚴重度")
     return parser.parse_args(argv)
 
 
@@ -531,7 +533,7 @@ def main(argv: Sequence[str]) -> int:
     disabled = frozenset(name.strip() for name in args.disable.split(",") if name.strip())
     unknown = sorted(name for name in disabled if name not in RULE_SEVERITY)
     if unknown:
-        print(f"未知规则名：{', '.join(unknown)}（用 --list-rules 看全部）", file=sys.stderr)
+        print(f"未知規則名：{', '.join(unknown)}（用 --list-rules 看全部）", file=sys.stderr)
         return 2
 
     opts = Options(max_chars=args.max_chars, baseline=args.baseline, disabled=disabled)
